@@ -1,4 +1,3 @@
-from random import seed
 from telegram.ext import Updater, ExtBot, MessageHandler, Filters, CallbackQueryHandler, CommandHandler
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
 import mysql.connector
@@ -184,7 +183,7 @@ def bt_reaction(update, context):
                     tosql = tuple(user_location[user_location["user_id"] == user_id].values.tolist()[0])
                     canetoad_cursor.execute(sql, tosql)
                     canetoad_conn.commit()
-                    print("%s send one data %s" % (observer, dt))
+                    print("%s sent an observation %s" % (observer, dt))
                     user_location = pop_user_selection(user_id, user_location)
 
                     user_last_row = pop_user_selection(user_id, user_last_row)
@@ -262,7 +261,7 @@ def mes_reaction(update, context):
         canetoad_cursor.execute("UPDATE account SET verify = 1 WHERE telegram_id = %s" % user_mes)
         canetoad_conn.commit()
         bot.send_message(ADMIN_ID, '%s have been vertified' % user_mes)
-        bot.send_message(user_id, '你的申請已經通過了!')
+        bot.send_message(user_mes, '你的申請已經通過了!')
 
     if user_mes in list(org.keys()) and user_id in applying: # listen the oranization sent from user
         applying.remove(user_id)
@@ -350,6 +349,21 @@ def delete(update, context):
 def help(update, context):
     user_id = str(update.message.chat.id)
     bot.send_message(user_id, "\n/signup - 申請回報權限\n/delete - 刪除上一筆資料(5分鐘內)\n/contact - 聯絡回報系統負責人")
+
+def download(update, context):
+    user_id = str(update.message.chat.id)
+
+    if user_id not in [ADMIN_ID, SUBADMIN_ID]:
+        bot.send_message(user_id, "You have not right to execute this command")
+        return
+
+    now = datetime.datetime.now().strftime("%Y-%m-%d")
+    observation = pd.read_sql("SELECT * FROM canetoaddemo.cane_toad", canetoad_conn)
+    observation.to_csv("./output-csv/output-%s.csv" % now, index = False)
+    observation = open("./output-csv/output-%s.csv" % now, 'rb')
+    bot.send_document(user_id, observation)
+    bot.send_document(ADMIN_ID, "%s downloaded data" % user_id)
+    print("%s downloaded data %s" % (user_id,now))
 
 cursor_setting()
 updater = Updater(TOKEN)
