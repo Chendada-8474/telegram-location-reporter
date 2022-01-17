@@ -95,7 +95,7 @@ def start(update, context):
     mysql_error_2013 = "2013 (HY000): Lost connection to MySQL server during query"
 
     try:
-        canetoad_cursor.execute("SELECT telegram_id FROM bfsduckdb.user WHERE verify = 1;")
+        canetoad_cursor.execute("SELECT telegram_id FROM canetoaddemo.account WHERE verify = 1;")
         ver_id = [i[0] for i in canetoad_cursor.fetchall()]
 
     except Exception as e:
@@ -103,7 +103,7 @@ def start(update, context):
             bot.send_message(ADMIN_ID, "mysql disconnection detected")
             canetoad_conn.reconnect(attempts = 3, delay = 0)
             bot.send_message(ADMIN_ID, "mysql reconnected")
-            canetoad_cursor.execute("SELECT telegram_id FROM bfsduckdb.user WHERE verify = 1;")
+            canetoad_cursor.execute("SELECT telegram_id FROM canetoaddemo.account WHERE verify = 1;")
             ver_id = [i[0] for i in canetoad_cursor.fetchall()]
 
     user_id = str(update.message.chat.id)
