@@ -92,8 +92,19 @@ def start(update, context):
     """
 
     global user_location
-    canetoad_cursor.execute("SELECT telegram_id FROM canetoaddemo.account WHERE verify = 1;")
-    ver_id = [i[0] for i in canetoad_cursor.fetchall()]
+    mysql_error_2013 = "2013 (HY000): Lost connection to MySQL server during query"
+
+    try:
+        canetoad_cursor.execute("SELECT telegram_id FROM bfsduckdb.user WHERE verify = 1;")
+        ver_id = [i[0] for i in canetoad_cursor.fetchall()]
+
+    except Exception as e:
+        if str(e) == mysql_error_2013:
+            bot.send_message(ADMIN_ID, "mysql disconnection detected")
+            canetoad_conn.reconnect(attempts = 3, delay = 0)
+            bot.send_message(ADMIN_ID, "mysql reconnected")
+            canetoad_cursor.execute("SELECT telegram_id FROM bfsduckdb.user WHERE verify = 1;")
+            ver_id = [i[0] for i in canetoad_cursor.fetchall()]
 
     user_id = str(update.message.chat.id)
 
@@ -341,22 +352,14 @@ def help(update, context):
     bot.send_message(user_id, "\n/signup - 申請回報權限\n/delete - 刪除上一筆資料(5分鐘內)\n/contact - 聯絡回報系統負責人")
 
 cursor_setting()
-while True:
-    try:
-        updater = Updater(TOKEN)
-        updater.dispatcher.add_handler(CommandHandler('signup', signup))
-        updater.dispatcher.add_handler(CommandHandler('authorize', authorize))
-        updater.dispatcher.add_handler(CommandHandler('contact', contact))
-        updater.dispatcher.add_handler(CommandHandler('delete', delete))
-        updater.dispatcher.add_handler(CommandHandler("help", help))
-        updater.dispatcher.add_handler(MessageHandler(Filters.location, start))
-        updater.dispatcher.add_handler(MessageHandler(Filters.text, mes_reaction))
-        updater.dispatcher.add_handler(CallbackQueryHandler(bt_reaction))
-        updater.start_polling()
-        updater.idle()
-
-    except Exception as e:
-        bot.send_message(ADMIN_ID, e)
-
-        cursor_setting()
-        bot.send_message(ADMIN_ID, "mysql has been connected again")
+updater = Updater(TOKEN)
+updater.dispatcher.add_handler(CommandHandler('signup', signup))
+updater.dispatcher.add_handler(CommandHandler('authorize', authorize))
+updater.dispatcher.add_handler(CommandHandler('contact', contact))
+updater.dispatcher.add_handler(CommandHandler('delete', delete))
+updater.dispatcher.add_handler(CommandHandler("help", help))
+updater.dispatcher.add_handler(MessageHandler(Filters.location, start))
+updater.dispatcher.add_handler(MessageHandler(Filters.text, mes_reaction))
+updater.dispatcher.add_handler(CallbackQueryHandler(bt_reaction))
+updater.start_polling()
+updater.idle()
