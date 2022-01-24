@@ -1,5 +1,5 @@
-from telegram.ext import Updater, ExtBot, MessageHandler, Filters, CallbackQueryHandler, CommandHandler
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup
+from telegram.ext import Updater, ExtBot, MessageHandler, Filters, CallbackQueryHandler, CommandHandler, ConversationHandler
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 import mysql.connector
 import pandas as pd
 import datetime
@@ -12,6 +12,9 @@ f.close
 
 ADMIN_ID = "348929573" # ID of Ta-chih Chen
 SUBADMIN_ID = "5049561715" # ID of Yung-lun Lin
+SUBADMIN2_ID = "5049415750" # ID of Yung-lun Lin
+
+admins = [ADMIN_ID, SUBADMIN_ID, SUBADMIN2_ID]
 
 bot = ExtBot(TOKEN)
 
@@ -217,7 +220,7 @@ def bt_reaction(update, context):
         organization = user_org.loc[user_org['user_id'].map(lambda x: user_id == x), 'org'].values[0]
 
         sql = "INSERT INTO account (user_name, telegram_id, verify, org) VALUES (%s, %s, %s, %s)"
-        tosql = (user_name, user_id, 0, org[organization])
+        tosql = (user_name, user_id, 0, organization)
         canetoad_cursor.execute(sql, tosql)
         canetoad_conn.commit()
 
@@ -250,7 +253,7 @@ def mes_reaction(update, context):
                     return
 
                 user_location.loc[user_location['user_id'].map(lambda x: user_id == x), 'habitat'] = user_mes
-                bot.send_message(user_id, '你選擇了%s' % user_mes)
+                bot.send_message(user_id, '你選擇了%s' % user_mes, reply_markup = ReplyKeyboardRemove())
                 bot.send_message(user_id, '按"確認"上傳資料，按"取消"重來\n重新回報請再分享一個新的點位', reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(i, callback_data = yn[i]) for i in yn.keys()]]))
                 return
 
@@ -348,12 +351,17 @@ def delete(update, context):
 
 def help(update, context):
     user_id = str(update.message.chat.id)
-    bot.send_message(user_id, "\n/signup - 申請回報權限\n/delete - 刪除上一筆資料(5分鐘內)\n/contact - 聯絡回報系統負責人")
+
+    if user_id in admins:
+        bot.send_message(user_id, "使用教學：https://github.com/Chendada-8474/telegram-location-reporter\n\n/signup - 申請回報權限\n/delete - 刪除上一筆資料(5分鐘內)\n/contact - 聯絡回報系統負責人\n/authorize - 授權使用權限\n/download - 下載所有資料 ")
+
+    else:
+        bot.send_message(user_id, "使用教學：https://github.com/Chendada-8474/telegram-location-reporter\n\n/signup - 申請回報權限\n/delete - 刪除上一筆資料(5分鐘內)\n/contact - 聯絡回報系統負責人")
 
 def download(update, context):
     user_id = str(update.message.chat.id)
 
-    if user_id not in [ADMIN_ID, SUBADMIN_ID]:
+    if user_id not in admins:
         bot.send_message(user_id, "You have not right to execute this command")
         return
 
@@ -365,6 +373,56 @@ def download(update, context):
     bot.send_document(ADMIN_ID, "%s downloaded data" % user_id)
     print("%s downloaded data %s" % (user_id,now))
 
+def announce(update, context):
+    user_id = str(update.message.chat.id)
+
+    if user_id not in admins:
+        bot.send_message(user_id, 'You have no right to execute this command')
+        return
+
+    bot.send_message(user_id, "what do you want to announce?")
+    return 1
+
+def get_announce(update, context):
+    global announcement
+    user_id = str(update.message.chat.id)
+    announcement = str(update.message.text)
+
+    announce_bt = {
+        "確定": "announce",
+        "取消": "cancel_announce",
+    }
+
+    # bot.send_message(user_id, '確定公告？', reply_markup = ReplyKeyboardMarkup([[i] for i in announce_bt], resize_keyboard=True))
+    bot.send_message(user_id, "確定公告？",  reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(i, callback_data = announce_bt[i]) for i in announce_bt.keys()]]))
+    return 2
+
+def push_announce(update, context):
+    send = update.callback_query.data
+    user_id = str(update.callback_query.message.chat.id)
+    canetoad_cursor.execute("SELECT telegram_id FROM canetoaddemo.account WHERE verify = 1")
+    tg_id = [i[0] for i in canetoad_cursor.fetchall()]
+    canetoad_cursor.execute("SELECT user_name FROM canetoaddemo.account WHERE telegram_id = %s" % user_id)
+    announcer = canetoad_cursor.fetchone()[0]
+
+    if send == "announce":
+
+        for id in tg_id:
+            if id == user_id:
+                bot.send_message(user_id, "message announced:\n%s" % announcement)
+            else:
+                bot.send_message(id, "公告：\n%s\nby %s" % (announcement, announcer))
+
+    elif send == "cancel_announce":
+        bot.send_message(user_id, "公告已取消")
+
+    return ConversationHandler.END
+
+def announce_cancel(update, context):
+    return ConversationHandler.END
+
+
+
 cursor_setting()
 updater = Updater(TOKEN)
 updater.dispatcher.add_handler(CommandHandler('signup', signup))
@@ -372,6 +430,15 @@ updater.dispatcher.add_handler(CommandHandler('authorize', authorize))
 updater.dispatcher.add_handler(CommandHandler('contact', contact))
 updater.dispatcher.add_handler(CommandHandler('delete', delete))
 updater.dispatcher.add_handler(CommandHandler("help", help))
+updater.dispatcher.add_handler(CommandHandler("download", download))
+
+updater.dispatcher.add_handler(ConversationHandler(
+    [CommandHandler('announce', announce)], {
+        1: [MessageHandler(Filters.text, get_announce)],
+        2: [CallbackQueryHandler(push_announce)],
+        },[CommandHandler('announce_cancel', announce_cancel)]
+        ))
+
 updater.dispatcher.add_handler(MessageHandler(Filters.location, start))
 updater.dispatcher.add_handler(MessageHandler(Filters.text, mes_reaction))
 updater.dispatcher.add_handler(CallbackQueryHandler(bt_reaction))
