@@ -67,7 +67,7 @@ user_org = pd.DataFrame({"user_id": [], "org": []})
 def cursor_setting():
     """setting the mysql connection on localhost, to database
     """
-    global canetoad_conn, canetoad_cursor
+    # global canetoad_conn, canetoad_cursor
 
     f = open('./password.txt')
     mysql_password = f.read()
@@ -81,6 +81,8 @@ def cursor_setting():
     )
 
     canetoad_cursor = canetoad_conn.cursor()
+
+    return canetoad_conn, canetoad_cursor
 
 
 def pop_user_selection(user_id, data_table):
@@ -96,6 +98,9 @@ def start(update, context):
     global user_location
     mysql_error_2013 = "2013 (HY000): Lost connection to MySQL server during query"
 
+    canetoad_conn, canetoad_cursor = cursor_setting()
+
+
     try:
         canetoad_cursor.execute("SELECT telegram_id FROM canetoaddemo.account WHERE verify = 1;")
         ver_id = [i[0] for i in canetoad_cursor.fetchall()]
@@ -108,6 +113,7 @@ def start(update, context):
             canetoad_cursor.execute("SELECT telegram_id FROM canetoaddemo.account WHERE verify = 1;")
             ver_id = [i[0] for i in canetoad_cursor.fetchall()]
 
+    canetoad_conn.disconnect()
     user_id = str(update.message.chat.id)
 
     if user_id not in ver_id:
@@ -132,6 +138,8 @@ def bt_reaction(update, context):
     callback = update.callback_query.data
     user_id = str(update.callback_query.message.chat.id)
     user_sel = user_location[user_location["user_id"] == user_id].index
+
+
 
     if callback == "ad" or callback == "juv":
 
@@ -184,6 +192,10 @@ def bt_reaction(update, context):
 
                     sql = "INSERT INTO cane_toad (x, y, age, habitat, telegram_id, observer, datetime) VALUES (%s, %s, %s, %s, %s, %s, %s)"
                     tosql = tuple(user_location[user_location["user_id"] == user_id].values.tolist()[0])
+
+                    canetoad_conn, canetoad_cursor = cursor_setting()
+
+
                     canetoad_cursor.execute(sql, tosql)
                     canetoad_conn.commit()
                     print("%s sent an observation %s" % (observer, dt))
@@ -193,16 +205,19 @@ def bt_reaction(update, context):
                     canetoad_cursor.execute("SELECT id FROM canetoaddemo.cane_toad WHERE telegram_id = '%s' ORDER BY id DESC LIMIT 0, 1" % user_id)
                     last_id = str(canetoad_cursor.fetchone()[0])
                     user_last_row = user_last_row.append({"user_id":user_id, "row_id": last_id, "datetime":dt}, ignore_index=True)
-
+                    canetoad_conn.disconnect()
 
     elif callback == "delete": # deleting commit in sql datebase
         row_id = int(user_last_row.loc[user_last_row['user_id'].map(lambda x: user_id == x), 'row_id'].values[0])
+
+        canetoad_conn, canetoad_cursor = cursor_setting()
         canetoad_cursor.execute("SET SQL_SAFE_UPDATES = 0")
         canetoad_conn.commit()
         canetoad_cursor.execute("DELETE FROM cane_toad WHERE id = %i" % row_id)
         canetoad_cursor.execute("SET SQL_SAFE_UPDATES = 1")
         canetoad_conn.commit()
         bot.send_message(user_id, "資料已刪除成功！")
+        canetoad_conn.disconnect()
 
         first_name = update.callback_query.message.chat.first_name
         last_name = update.callback_query.message.chat.last_name
@@ -219,10 +234,13 @@ def bt_reaction(update, context):
         user_name = first_name + " " + last_name
         organization = user_org.loc[user_org['user_id'].map(lambda x: user_id == x), 'org'].values[0]
 
+        canetoad_conn, canetoad_cursor = cursor_setting()
+
         sql = "INSERT INTO account (user_name, telegram_id, verify, org) VALUES (%s, %s, %s, %s)"
         tosql = (user_name, user_id, 0, organization)
         canetoad_cursor.execute(sql, tosql)
         canetoad_conn.commit()
+        canetoad_conn.disconnect()
 
         bot.send_message(user_id, '你的申請已經送出\n請等待管理員審核')
         bot.send_message(ADMIN_ID, '%s from %s submitted the application' % (user_name, organization))
@@ -257,14 +275,19 @@ def mes_reaction(update, context):
                 bot.send_message(user_id, '按"確認"上傳資料，按"取消"重來\n重新回報請再分享一個新的點位', reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(i, callback_data = yn[i]) for i in yn.keys()]]))
                 return
 
+    canetoad_conn, canetoad_cursor = cursor_setting()
+
     canetoad_cursor.execute("SELECT telegram_id FROM canetoaddemo.account WHERE verify = 0;")
     tg_id = [i[0] for i in canetoad_cursor.fetchall()]
+    canetoad_conn.disconnect()
 
     if user_mes in tg_id and user_id == ADMIN_ID: # admin update the vetify in mysql database
+        canetoad_conn, canetoad_cursor = cursor_setting()
         canetoad_cursor.execute("UPDATE account SET verify = 1 WHERE telegram_id = %s" % user_mes)
         canetoad_conn.commit()
         bot.send_message(ADMIN_ID, '%s have been vertified' % user_mes)
         bot.send_message(user_mes, '你的申請已經通過了!')
+        canetoad_conn.disconnect()
 
     if user_mes in list(org.keys()) and user_id in applying: # listen the oranization sent from user
         applying.remove(user_id)
@@ -277,9 +300,11 @@ def mes_reaction(update, context):
 
 def signup(update, context):
     global user_org
+    canetoad_conn, canetoad_cursor = cursor_setting()
     user_id = str(update.message.chat.id)
     canetoad_cursor.execute("SELECT telegram_id FROM canetoaddemo.account;")
     tg_id = [i[0] for i in canetoad_cursor.fetchall()]
+    canetoad_conn.disconnect()
 
     if user_id in [ADMIN_ID, SUBADMIN_ID]:
         bot.send_message(user_id, 'You are already an admin')
@@ -304,8 +329,10 @@ def authorize(update, context):
         bot.send_message(user_id, 'You have no right to execute this command')
         return
 
+    canetoad_conn, canetoad_cursor = cursor_setting()
     canetoad_cursor.execute("SELECT user_name, telegram_id FROM canetoaddemo.account WHERE verify = 0;")
     tg_id = [[i[0],i[1]] for i in canetoad_cursor.fetchall()]
+    canetoad_conn.disconnect()
 
     if len(tg_id) == 0:
         bot.send_message(user_id, 'All users have been autherized')
@@ -323,9 +350,11 @@ def contact(update, context):
 
 
 def delete(update, context):
+    canetoad_conn, canetoad_cursor = cursor_setting()
     canetoad_cursor.execute("SELECT telegram_id FROM canetoaddemo.account WHERE verify = 1;")
     ver_id = [i[0] for i in canetoad_cursor.fetchall()]
     user_id = str(update.message.chat.id)
+    canetoad_conn.disconnect()
 
     row_dt = pd.to_datetime(user_last_row.loc[user_last_row['user_id'].map(lambda x: user_id == x), 'datetime'].values)
     now_dt = datetime.datetime.now()
@@ -344,34 +373,95 @@ def delete(update, context):
         bot.send_message(user_id, "上一筆紀錄已經超過5分鐘，需要修改請直接聯絡系統管理員\n輸入 /contact 顯示聯絡資訊")
         return
 
+    canetoad_conn, canetoad_cursor = cursor_setting()
     canetoad_cursor.execute("SELECT age, habitat FROM canetoaddemo.cane_toad WHERE id = %i" % int(row_id[0]))
     last_recoed = [i for i in canetoad_cursor.fetchall()]
+    canetoad_conn.disconnect()
 
     bot.send_message(user_id, '你確定要刪除上一筆紀錄?\n上一筆紀錄：\n成幼為：%s 環境為：%s' % (last_recoed[0][0], last_recoed[0][1]), reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(i, callback_data = de[i]) for i in de.keys()]]))
+
 
 def help(update, context):
     user_id = str(update.message.chat.id)
 
-    if user_id in admins:
-        bot.send_message(user_id, "使用教學：https://github.com/Chendada-8474/telegram-location-reporter\n\n/signup - 申請回報權限\n/delete - 刪除上一筆資料(5分鐘內)\n/contact - 聯絡回報系統負責人\n/authorize - 授權使用權限\n/download - 下載所有資料 ")
+    f = open('./txt-message/help.txt', 'r', encoding='utf-8')
+    help_messages = f.read()
+    f.close()
 
-    else:
-        bot.send_message(user_id, "使用教學：https://github.com/Chendada-8474/telegram-location-reporter\n\n/signup - 申請回報權限\n/delete - 刪除上一筆資料(5分鐘內)\n/contact - 聯絡回報系統負責人")
+    bot.send_message(user_id, "使用教學：https://hackmd.io/@chendada/ryHgnOZTF\n\n" + help_messages)
+
 
 def download(update, context):
     user_id = str(update.message.chat.id)
 
-    if user_id not in admins:
-        bot.send_message(user_id, "You have not right to execute this command")
-        return
+    # if user_id not in admins:
+    #     bot.send_message(user_id, "You have not right to execute this command")
+    #     return
 
-    now = datetime.datetime.now().strftime("%Y-%m-%d")
-    observation = pd.read_sql("SELECT * FROM canetoaddemo.cane_toad", canetoad_conn)
-    observation.to_csv("./output-csv/output-%s.csv" % now, index = False)
-    observation = open("./output-csv/output-%s.csv" % now, 'rb')
-    bot.send_document(user_id, observation)
-    bot.send_document(ADMIN_ID, "%s downloaded data" % user_id)
-    print("%s downloaded data %s" % (user_id,now))
+    canetoad_conn, canetoad_cursor = cursor_setting()
+    canetoad_cursor.execute("SELECT telegram_id FROM bfsduckdb.user WHERE verify = 1;")
+    tg_id = [i[0] for i in canetoad_cursor.fetchall()]
+    canetoad_conn.disconnect()
+
+    if user_id not in tg_id:
+        bot.send_message(user_id, "You have not right to execute this command")
+        return ConversationHandler.END
+
+    do_download_all = {
+        "下載全部": "all",
+        "沒載過的就好": "not_all",
+        "取消": "download_cancel"
+        }
+
+    bot.send_message(user_id, "請問你要下載全部的資料\n還是只下載沒下載過的資料就好？", reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(i, callback_data = do_download_all[i]) for i in do_download_all.keys()]]))
+
+    return "d1"
+
+def download_all_or_not(update, context):
+    all_or_not = update.callback_query.data
+    user_id = str(update.callback_query.message.chat.id)
+    now = datetime.datetime.now().strftime("%Y-%m-%d_%H%M")
+
+    canetoad_conn, canetoad_cursor = cursor_setting()
+
+    if all_or_not == "all":
+        observation = pd.read_sql("SELECT id, x, y, age, datetime, downloaded FROM canetoaddemo.cane_toad WHERE telegram_id = '%s'" % user_id, canetoad_conn)
+
+        observation.to_csv("./output-csv/output-%s.csv" % now, index = False)
+        observation = open("./output-csv/output-%s.csv" % now, 'rb')
+        bot.send_document(user_id, observation)
+        bot.send_message(ADMIN_ID, "%s downloaded data" % user_id)
+        print("%s downloaded data %s" % (user_id,now))
+
+    elif all_or_not == "not_all":
+
+        observation = pd.read_sql("SELECT id, x, y, age, datetime FROM canetoaddemo.cane_toad WHERE telegram_id = '%s' AND downloaded = 0" % user_id, canetoad_conn)
+
+        if observation.empty:
+            bot.send_message(user_id, "全部的資料已經載過囉！")
+            return ConversationHandler.END
+
+        canetoad_cursor.execute("UPDATE canetoaddemo.cane_toad SET downloaded = 1 WHERE telegram_id = '%s';" % user_id)
+
+        canetoad_conn.commit()
+
+
+        observation.to_csv("./output-csv/output-%s.csv" % now, index = False)
+        observation = open("./output-csv/output-%s.csv" % now, 'rb')
+        bot.send_document(user_id, observation)
+        bot.send_message(ADMIN_ID, "%s downloaded data" % user_id)
+        print("%s downloaded data %s" % (user_id,now))
+
+    elif all_or_not == "download_cancel":
+        bot.send_message(user_id, "下載已取消\nBye Bye")
+        return ConversationHandler.END
+
+    canetoad_conn.disconnect()
+
+    return ConversationHandler.END
+
+def download_cancel(update, context):
+    return ConversationHandler.END
 
 def announce(update, context):
     user_id = str(update.message.chat.id)
@@ -382,6 +472,7 @@ def announce(update, context):
 
     bot.send_message(user_id, "what do you want to announce?")
     return 1
+
 
 def get_announce(update, context):
     global announcement
@@ -397,13 +488,16 @@ def get_announce(update, context):
     bot.send_message(user_id, "確定公告？",  reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(i, callback_data = announce_bt[i]) for i in announce_bt.keys()]]))
     return 2
 
+
 def push_announce(update, context):
     send = update.callback_query.data
     user_id = str(update.callback_query.message.chat.id)
+    canetoad_conn, canetoad_cursor = cursor_setting()
     canetoad_cursor.execute("SELECT telegram_id FROM canetoaddemo.account WHERE verify = 1")
     tg_id = [i[0] for i in canetoad_cursor.fetchall()]
     canetoad_cursor.execute("SELECT user_name FROM canetoaddemo.account WHERE telegram_id = %s" % user_id)
     announcer = canetoad_cursor.fetchone()[0]
+    canetoad_conn.disconnect()
 
     if send == "announce":
 
@@ -418,6 +512,7 @@ def push_announce(update, context):
 
     return ConversationHandler.END
 
+
 def announce_cancel(update, context):
     return ConversationHandler.END
 
@@ -430,13 +525,19 @@ updater.dispatcher.add_handler(CommandHandler('authorize', authorize))
 updater.dispatcher.add_handler(CommandHandler('contact', contact))
 updater.dispatcher.add_handler(CommandHandler('delete', delete))
 updater.dispatcher.add_handler(CommandHandler("help", help))
-updater.dispatcher.add_handler(CommandHandler("download", download))
+# updater.dispatcher.add_handler(CommandHandler("download", download))。
 
 updater.dispatcher.add_handler(ConversationHandler(
     [CommandHandler('announce', announce)], {
         1: [MessageHandler(Filters.text, get_announce)],
         2: [CallbackQueryHandler(push_announce)],
         },[CommandHandler('announce_cancel', announce_cancel)]
+        ))
+
+updater.dispatcher.add_handler(ConversationHandler(
+    [CommandHandler('download', download)], {
+        "d1": [CallbackQueryHandler(download_all_or_not)],
+        },[CommandHandler('download_cancel', download_cancel)]
         ))
 
 updater.dispatcher.add_handler(MessageHandler(Filters.location, start))

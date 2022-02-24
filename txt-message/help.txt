@@ -1,0 +1,7 @@
+指令：
+/help - 查看指令以及使用教學
+/signup - 申請回報權限
+/delete - 刪除上一筆資料(5分鐘內)
+/contact - 聯絡回報系統負責人
+/download - 下載個人上傳的資料
+/authorize - 授權使用權限 (admin only)
