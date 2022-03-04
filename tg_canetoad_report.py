@@ -388,7 +388,7 @@ def help(update, context):
     help_messages = f.read()
     f.close()
 
-    bot.send_message(user_id, "使用教學：https://hackmd.io/@chendada/ryHgnOZTF\n\n" + help_messages)
+    bot.send_message(user_id, "使用教學：https://github.com/Chendada-8474/telegram-location-reporter/tree/master\n\n" + help_messages)
 
 
 def download(update, context):
@@ -543,5 +543,5 @@ updater.dispatcher.add_handler(ConversationHandler(
 updater.dispatcher.add_handler(MessageHandler(Filters.location, start))
 updater.dispatcher.add_handler(MessageHandler(Filters.text, mes_reaction))
 updater.dispatcher.add_handler(CallbackQueryHandler(bt_reaction))
-updater.start_polling()
+updater.start_polling(timeout=600)
 updater.idle()
